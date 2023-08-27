@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@prismamodule/prisma.service';
 import { User, Loan, Prisma, Book } from '@prisma/client';
+import { CheckRule } from '@common/utils/checkRule';
+import { BookMustBeExists, LoanMustBeExistAbleToReturnBook, BookOnloanFieldMustBeFalseAbleToLoan, UserMustBeExists, ScoreMustBeIntegerValueBetweenZeroAndTen } from './rule';
 
 type LoanedBook = { name: string, userScore?: number };
 type UserDetails = User & { books: { present: LoanedBook[], past: LoanedBook[] } };
@@ -18,10 +20,6 @@ export class UserService {
             this.prisma.user.findUnique({ where: { id: params.userId } }),
         ]);
 
-        if (!book) throw new Error('Book not exists.');
-
-        if (!user) throw new Error('User not exists.');
-
         return { book, user };
     }
 
@@ -33,10 +31,6 @@ export class UserService {
                 returned_at: null,
             },
         });
-
-        if (!loan) {
-            throw new Error('User not have loan');
-        }
 
         return { loan };
     }
@@ -65,9 +59,7 @@ export class UserService {
             },
         });
 
-        if (!user) {
-            throw new Error('User not exists.');
-        }
+        CheckRule(new UserMustBeExists(user));
 
         const userDetails = {
             id: user.id,
@@ -110,9 +102,11 @@ export class UserService {
     }
 
     async borrowBook ({ userId, bookId }: { userId: number, bookId: number }): Promise<number> {
-        const { book } = await this.getValidatedBookAndUser({ userId, bookId });
+        const { book, user } = await this.getValidatedBookAndUser({ userId, bookId });
 
-        if (book.onloan === true) throw new Error('Book already loanded.');
+        CheckRule(new BookMustBeExists(book));
+        CheckRule(new UserMustBeExists(user));
+        CheckRule(new BookOnloanFieldMustBeFalseAbleToLoan(book.onloan));
 
         const loan = await this.prisma.book.update({
             where: { id: bookId },
@@ -130,9 +124,16 @@ export class UserService {
     }
 
     async returnBook ({ userId, bookId, score }: { userId: number, bookId: number, score: number }): Promise<number> {
-        await this.getValidatedBookAndUser({ userId, bookId });
+        CheckRule(new ScoreMustBeIntegerValueBetweenZeroAndTen(score));
+
+        const { book, user } = await this.getValidatedBookAndUser({ userId, bookId });
+
+        CheckRule(new BookMustBeExists(book));
+        CheckRule(new UserMustBeExists(user));
 
         const { loan } = await this.getValidatedActiveLoan({ userId, bookId });
+
+        CheckRule(new LoanMustBeExistAbleToReturnBook(loan));
 
         const updatedLoan = await this.prisma.loan.update({
             where: { id: loan.id },

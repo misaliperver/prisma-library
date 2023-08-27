@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@prismamodule/prisma.service';
 import { Book, User, Prisma } from '@prisma/client';
+import { CheckRule } from '@common/utils/checkRule';
+import { BookMustBeExists } from './rule';
 
-type BookDetails = Omit<Book & { score?: number }, 'onloan'>;
+type BookDetails = Omit<Book & { score?: string|number }, 'onloan'>;
 
 @Injectable()
 export class BookService {
@@ -10,7 +12,7 @@ export class BookService {
 
     private async bookAvarageScoreAggregation(
         bookId: number
-    ): Promise<number | null> {
+    ): Promise<string | number | null> {
         const avgResult = await this.prisma.loan.aggregate({
             _avg: {
                 score: true,
@@ -21,7 +23,7 @@ export class BookService {
             }
         });
 
-        return avgResult._avg.score;
+        return avgResult._avg.score ? avgResult._avg.score.toFixed(2) : -1;
     }
 
     async book(
@@ -35,12 +37,9 @@ export class BookService {
             this.bookAvarageScoreAggregation(bookId),
         ]);
 
-        if (!book) {
-            throw new Error('Book not exists.');
-        }
+        CheckRule(new BookMustBeExists(book));
 
-
-        return { id: book.id, name: book.name, score: score || -1 };
+        return { id: book.id, name: book.name, score };
     }
 
     async books(params: {

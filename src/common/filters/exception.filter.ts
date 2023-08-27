@@ -4,6 +4,7 @@ import { Exception } from '../exception/exception';
 import { ApiServerConfig } from '../../apiserver.config';
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger, UnauthorizedException } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { BusinessRuleValidationException } from '@common/exception/BusinessRuleValidationException';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -25,7 +26,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
             Logger.error(message);
         }
-        response.status(500);
+
+        response.status(errorResponse.code || 500);
 
         response.json(errorResponse);
     }
@@ -44,6 +46,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     private handleCoreException(error: Error, errorResponse: ApiResponseBase<unknown>): ApiResponseBase<unknown> {
         if (error instanceof Exception) {
             errorResponse = ApiResponseBase.error(error.code, error.message, error.data);
+        }
+
+        if (error instanceof BusinessRuleValidationException) {
+            errorResponse = ApiResponseBase.error(error.BrokenRule.Code, error.message, error.BrokenRule.Message);
         }
 
         return errorResponse;
